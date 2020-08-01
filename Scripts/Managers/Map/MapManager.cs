@@ -21,7 +21,10 @@ public class MapManager : MonoBehaviour
             GameObject[] gos = GameObject.FindGameObjectsWithTag(chunk.chunkTag);
             gameObjects.Add(chunk.chunkTag, gos);
             chunks.Add(chunk.chunkTag, chunk);
-            DeactivateChunk(chunk.chunkTag);
+            if (!chunk.spawnLocation)
+            {
+                DeactivateChunk(chunk.chunkTag);
+            }
         }
 
         foreach (PlayerChunk playerChunk in playerChunkList)
@@ -51,7 +54,7 @@ public class MapManager : MonoBehaviour
             Chunk chunk = chunks[playerChunk.chunkTag];
             foreach (string chunkTag in chunk.neighboringTags)
             {
-                tagsToDeactivate.Add(chunkTag);    
+                tagsToDeactivate.Add(chunkTag);
             }
         }
 
@@ -66,7 +69,8 @@ public class MapManager : MonoBehaviour
             {
                 tagsToActivate.Add(chunkTag);
             }
-        } else if (newTag != null && playerChunks.ContainsKey(newTag))
+        }
+        else if (newTag != null && playerChunks.ContainsKey(newTag))
         {
             playerChunks[newTag].numberOfPlayers++;
         }

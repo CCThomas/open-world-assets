@@ -26,17 +26,46 @@ public abstract class AbstractMovementManager
     protected readonly float turnSmoothTime = 0.1f;
 
     // Trackers
-    public bool down, quick, midTransition, up;
+    public bool down, quick, up;
     public float gravity;
-    protected float velocityTurnSmooth, transitionTime;
+    protected float velocityTurnSmooth;
     protected Collider collider;
     protected Vector3 pointOfContact;
-    protected MovementState currentState;
-    public MovementState intendedState;
+    private MovementState currentState;
+    private MovementState intendedState;
 
     public enum MovementState
     {
         Climb, Fly, Ground, Swim, Unkown
+    }
+
+    public static AbstractMovementManager GetMovementManager(AbstractMovementManager movementManager)
+    {
+        if (movementManager.intendedState == MovementState.Climb)
+        {
+            Debug.Log("Climbing");
+            movementManager = new ClimbMovementManager(movementManager);
+        }
+        else if (movementManager.intendedState == MovementState.Fly)
+        {
+            Debug.Log("Flying");
+            movementManager = new FlyMovementManager(movementManager);
+        }
+        else if (movementManager.intendedState == MovementState.Ground)
+        {
+            Debug.Log("Grounding");
+            movementManager = new GroundMovementManager(movementManager);
+        }
+        else if (movementManager.intendedState == MovementState.Swim)
+        {
+            Debug.Log("Swimming");
+            movementManager = new SwimMovementManager(movementManager);
+        }
+        else
+        {
+            throw new System.NotImplementedException("Movement State not implemented=" + movementManager.intendedState);
+        }
+        return movementManager;
     }
 
     protected AbstractMovementManager(AbstractMovementManager movementManager)
@@ -49,9 +78,11 @@ public abstract class AbstractMovementManager
         down = movementManager.down;
         quick = movementManager.quick;
         up = movementManager.up;
+        gravity = movementManager.gravity;
         collider = movementManager.collider;
         pointOfContact = movementManager.pointOfContact;
-        //raycastHit = movementManager.raycastHit;
+        intendedState = movementManager.intendedState;
+        currentState = movementManager.currentState;
         movementManager.CleanUp();
     }
 
@@ -133,15 +164,9 @@ public abstract class AbstractMovementManager
         this.currentState = currentState;
     }
 
-    protected void SetIntendedState(MovementState intendedState, float transitionTime)
+    protected void SetIntendedState(MovementState intendedState)
     {
-        if (this.transitionTime > Time.time)
-        {
-            return;
-        }
         this.intendedState = intendedState;
-        this.transitionTime = Time.time + transitionTime;
-        midTransition = true;
     }
 
     protected void SetSpeedForward(float speedForward, float dampTime)
@@ -157,5 +182,43 @@ public abstract class AbstractMovementManager
     protected void SetSpeedUp(float speedUp, float dampTime)
     {
         animator.SetFloat("speedUp", speedUp, dampTime, Time.deltaTime);
+    }
+
+    protected bool TryClimbing(Vector3 lookingDirection)
+    {
+        float climbingSkill = character.GetAbilityValue("climb");
+        if (0 == climbingSkill)
+        {
+            // Player cannot climb
+            return false;
+        }
+
+        Vector3 origin = character.getBodyPartHead(graphics).position;
+        RaycastHit hit = Raycast(origin, lookingDirection, character.GetTraitValue("height") * .8f, DEFAULT, Color.green);
+        if (hit.collider != null)
+        {
+            Climbable climbable = hit.collider.gameObject.GetComponent<Climbable>();
+
+            if (climbable != null && climbingSkill >= climbable.difficulty)
+            {
+                collider = hit.collider;
+                pointOfContact = hit.point;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected bool TryFlying()
+    {
+        return 0 != character.GetAbilityValue("fly");
+    }
+
+    protected bool TrySwiming(Collider other)
+    {
+        return other.gameObject.layer == WATER_INDEX
+           && other.transform.position.y > graphics.Find("Armature/Hip/Stomach/Chest").position.y
+           && 0 != character.GetAbilityValue("swim") ? true : false;
     }
 }

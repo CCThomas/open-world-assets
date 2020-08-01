@@ -6,6 +6,7 @@ public class Chunk
 {
     // "tag" is a variable on mono behaviors. To avoid interefing with that varaible, use "chunkTag".
     public string chunkTag;
+    public bool spawnLocation;
     public List<string> neighboringTags;
 
     // Trackers

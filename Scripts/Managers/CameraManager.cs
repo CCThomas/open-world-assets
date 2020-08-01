@@ -32,6 +32,9 @@ public class CameraManager
         this.thirdPersonLayers = thirdPersonLayers;
         currentCameaMode = CameraMode.FirstPerson;
 
+        // Starting camera position
+        transform.forward = parent.forward;
+
         // Lock Cursor to Game
         Cursor.lockState = CursorLockMode.Locked;
 

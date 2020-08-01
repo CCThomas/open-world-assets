@@ -101,30 +101,10 @@ public class CharacterManager
         if (movementManager == null)
         {
             movementManager = new GroundMovementManager(character, transform);
-            movementManager.intendedState = AbstractMovementManager.MovementState.Ground;
         }
         else
         {
-            if (movementManager.intendedState == AbstractMovementManager.MovementState.Climb)
-            {
-                movementManager = new ClimbMovementManager(movementManager);
-            }
-            else if (movementManager.intendedState == AbstractMovementManager.MovementState.Fly)
-            {
-                movementManager = new FlyMovementManager(movementManager);
-            }
-            else if (movementManager.intendedState == AbstractMovementManager.MovementState.Ground)
-            {
-                movementManager = new GroundMovementManager(movementManager);
-            }
-            else if (movementManager.intendedState == AbstractMovementManager.MovementState.Swim)
-            {
-                movementManager = new SwimMovementManager(movementManager);
-            }
-            else
-            {
-                throw new System.NotImplementedException("Movement State not implemented=" + movementManager.intendedState);
-            }
+            movementManager = AbstractMovementManager.GetMovementManager(movementManager);
         }
     }
 }

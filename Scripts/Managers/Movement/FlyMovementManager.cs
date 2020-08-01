@@ -4,11 +4,10 @@ using UnityEngine;
 
 public class FlyMovementManager : AbstractMovementManager
 {
-    bool submerged;
 
     public FlyMovementManager(AbstractMovementManager movementManager) : base(movementManager)
     {
-        currentState = MovementState.Fly;
+        SetCurrentState(MovementState.Fly);
         SetSwimming(true);
     }
 
@@ -19,12 +18,12 @@ public class FlyMovementManager : AbstractMovementManager
 
     public override void OnCollisionStay(Collision collision)
     {
-        SetIntendedState(MovementState.Ground, 0);
+        SetIntendedState(MovementState.Ground);
     }
 
     public override void OnTriggerStay(Collider other)
     {
-        SetIntendedState(MovementState.Ground, 0);
+        SetIntendedState(MovementState.Ground);
     }
 
     public override void UpdateAnimation()
@@ -34,9 +33,9 @@ public class FlyMovementManager : AbstractMovementManager
 
     public override void UpdateMovement(float horizontal, float vertical, Vector3 lookDirection)
     {
-        Vector3 targetVelocity = new Vector3(horizontal, 0, vertical);
+        Vector3 targetVelocity = new Vector3(0, 0, 1);
         targetVelocity = transform.TransformDirection(targetVelocity);
-        targetVelocity *= character.GetAbilityValue("swim");
+        targetVelocity *= character.GetAbilityValue("fly");
 
         // Prepare Velocity
         var velocity = rigidbody.velocity;
@@ -44,9 +43,9 @@ public class FlyMovementManager : AbstractMovementManager
         velocityChange.x = Mathf.Clamp(velocityChange.x, -maxVelocityChange, maxVelocityChange);
         velocityChange.z = Mathf.Clamp(velocityChange.z, -maxVelocityChange, maxVelocityChange);
 
-       transform.forward = lookDirection;
+        transform.forward = lookDirection;
 
-      
+
         // Apply a force that attempts to reach our target velocity
         rigidbody.AddForce(velocityChange, ForceMode.VelocityChange);
     }

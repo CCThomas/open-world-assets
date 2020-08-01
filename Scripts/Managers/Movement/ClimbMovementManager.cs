@@ -1,24 +1,24 @@
 ﻿using UnityEngine;
-using System.Linq;
-using System;
+using System.Collections;
+using TMPro;
 
 public class ClimbMovementManager : AbstractMovementManager
 {
-    Transform sphere;
-    Rigidbody sphereRigidbody;
-
-    // Properties
-    float wallGravity = 20.0f;
-    float ignoreSameHoldDistance = .3f;
-    float radius = .4f;
-
-    // Trackers
-    bool beenReset, onWall, hanging;
-    float reach, horizontal, vertical;
+    public static readonly string HOLD_NAME = "Hold";
+    public static readonly string TOP_OUT_NAME = "TopOut";
+    SphereMonoBehaviour sphere;
+    float radius = .2f;
+    float wallGravity = 20f;
+    float wantsToTopOutCount = 10;
+    float reach, topOutCounter;
+    bool needsReset, onWall, topOut;
     Vector3 max, min;
 
     public ClimbMovementManager(AbstractMovementManager movementManager) : base(movementManager)
     {
+        // Set State
+        SetCurrentState(MovementState.Climb);
+
         // Set Animation
         SetClimbing(true);
 
@@ -31,35 +31,25 @@ public class ClimbMovementManager : AbstractMovementManager
         rigidbody.angularVelocity = Vector3.zero;
 
         // Add Sphere Game Object
-        GameObject gameObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        sphere = gameObject.transform;
-        sphere.localScale *= radius;
-        sphere.parent = transform;
+        GameObject sphereGameObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        sphereGameObject.transform.parent = transform;
+        sphereGameObject.transform.localScale *= radius * 2; // diamiter
 
         // Set Sphere Mono Behavior to handle Collision and Trigger Events
-        SphereMonoBehaviour sphereMonoBehaviour = gameObject.AddComponent<SphereMonoBehaviour>();
-        sphereMonoBehaviour.SetClimbMovementManager(this);
+        sphere = sphereGameObject.AddComponent<SphereMonoBehaviour>();
+        sphere.SetClimbMovementManager(this);
 
-        // Set SphereRigidbody
-        sphereRigidbody = gameObject.AddComponent<Rigidbody>();
-        sphereRigidbody.angularDrag = 0;
-        sphereRigidbody.mass = 0;
-        sphereRigidbody.freezeRotation = true;
-        sphereRigidbody.useGravity = false;
-
-        // Set RayCast/Hold
+        // Set Hold
         SetHitInfo(collider, pointOfContact);
-
-        SetCurrentState(MovementState.Climb);
     }
 
     public override bool AttemptSetDown(bool desired)
     {
         if (desired)
         {
-            // Set Position off the wall
+            // Set Position off the wall to avoid collision
             transform.position = character.getBodyPartHead(graphics).position;
-            SetIntendedState(MovementState.Ground, .5f);
+            SetIntendedState(MovementState.Ground);
         }
         return desired;
     }
@@ -74,243 +64,128 @@ public class ClimbMovementManager : AbstractMovementManager
 
     public override void OnCollisionStay(Collision collision)
     {
-        if (midTransition)
-        {
-            return;
-        }
-
-        if (collision.gameObject.layer == DEFAULT_INDEX)
-        {
-            // Change forward direction to look in the direction of the hold. 
-            // This solves for a hold being on a different angle than the current player/sphere
-            Vector3 forward = sphere.forward;
-            sphere.forward = Vector3.down;
-
-            // Raycast, in a plus formation, for the hold the sphere triggered
-            RaycastHit hitInfo = RaycastSpread(sphere.position, sphere.forward, .2f, HOLD, Color.yellow, collision.transform);
-            sphere.forward = forward;
-            if (hitInfo.collider != null)
-            {
-                SetHitInfo(hitInfo);
-                SetIntendedState(MovementState.Ground, 10f);
-            }
-        }
         onWall = true;
     }
 
     public override void OnTriggerStay(Collider other)
     {
-        if (midTransition)
+        if (other.transform == collider.transform && radius > Vector3.Distance(other.transform.position, pointOfContact))
         {
             return;
         }
-
-        float distance = Mathf.Abs(Vector3.Distance(pointOfContact, sphere.position));
-        if (other.transform == collider.transform && ignoreSameHoldDistance > distance)
+        if (other.gameObject.name.Contains(HOLD_NAME))
         {
-            return;
-        }
-
-        if (other.gameObject.layer == HOLD_INDEX)
-        {
-            // Change forward direction to look in the direction of the hold. 
-            // This solves for a hold being on a different angle than the current player/sphere
-            Vector3 forward = sphere.forward;
-            sphere.forward = other.transform.forward;
-
-            // Raycast, in a plus formation, for the hold the sphere triggered
-            RaycastHit hitInfo = RaycastSpread(sphere.position, sphere.forward, .2f, HOLD, Color.yellow, other.transform);
-            sphere.forward = forward;
-            if (hitInfo.collider != null)
+            RaycastHit hit = Raycast(sphere.transform.position, other.transform.forward, radius, DEFAULT, Color.yellow);
+            if (hit.collider != null && hit.collider.transform == other.transform)
             {
-                SetHitInfo(hitInfo);
+                SetHitInfo(hit.collider, hit.point);
+            }
+            else
+            {
+                Debug.Log("Did not Hit Hold: " + other.gameObject.name);
             }
         }
-    }
-
-    public override void SetHitInfo(RaycastHit raycastHit)
-    {
-        SetHitInfo(raycastHit.collider, raycastHit.point);
     }
 
     public override void SetHitInfo(Collider collider, Vector3 pointOfContact)
     {
         base.SetHitInfo(collider, pointOfContact);
-        sphere.forward = collider.transform.forward;
+        if (collider.name.Contains(TOP_OUT_NAME))
+        {
+            topOut = true;
+            topOutCounter = 0;
+        }
         transform.forward = collider.transform.forward;
         transform.position = pointOfContact;
         min = new Vector3(pointOfContact.x - reach, pointOfContact.y - reach, pointOfContact.z - reach);
         max = new Vector3(pointOfContact.x + reach, pointOfContact.y + reach, pointOfContact.z + reach);
-        ResetSphereLocation();
+        ResetSphere();
     }
 
     public override void UpdateAnimation()
     {
-        // TODO
+        //throw new System.NotImplementedException();
     }
 
     public override void UpdateMovement(float horizontal, float vertical, Vector3 lookDirection)
     {
-        this.horizontal = horizontal;
-        this.vertical = vertical;
+        if (topOut && vertical > 0)
+        {
+            if (topOutCounter > wantsToTopOutCount)
+            {
+                SetIntendedState(MovementState.Ground);
+            }
+            else
+            {
+                topOutCounter++;
+            }
+
+            return;
+
+        }
+        else if (topOut)
+        {
+            topOutCounter = 0;
+        }
+
         if (horizontal == 0 && vertical == 0)
         {
-            if (!beenReset)
+            if (needsReset)
             {
-                ResetSphereLocation();
+                ResetSphere();
             }
             return;
         }
         else if (onWall)
         {
             Vector3 targetVelocity = new Vector3(horizontal, vertical, 0);
-            targetVelocity = sphere.TransformDirection(targetVelocity);
+            targetVelocity = sphere.transform.TransformDirection(targetVelocity);
             targetVelocity *= character.GetAbilityValue("climb");
-            var velocity = sphereRigidbody.velocity;
+            var velocity = sphere.rigidbody.velocity;
             var velocityChange = (targetVelocity - velocity);
             velocityChange.x = Mathf.Clamp(velocityChange.x, -maxVelocityChange, maxVelocityChange);
             velocityChange.y = Mathf.Clamp(velocityChange.y, -maxVelocityChange, maxVelocityChange);
             velocityChange.z = Mathf.Clamp(velocityChange.z, -maxVelocityChange, maxVelocityChange);
-            sphereRigidbody.AddForce(velocityChange, ForceMode.VelocityChange);
+            sphere.rigidbody.AddForce(velocityChange, ForceMode.VelocityChange);
         }
         else
         {
             // We apply gravity manually for more tuning control
-            float gravityForceDown = wallGravity * sphereRigidbody.mass;
-            sphereRigidbody.AddForce(sphere.up * -gravityForceDown);
+            float gravityForceDown = wallGravity * sphere.rigidbody.mass;
+            sphere.rigidbody.AddForce(sphere.transform.up * -gravityForceDown);
         }
-        beenReset = false;
 
         // We apply gravity manually for more tuning control
-        float gravityForce = wallGravity * sphereRigidbody.mass;
-        sphereRigidbody.AddForce(sphere.forward * gravityForce);
+        float gravityForce = wallGravity * sphere.rigidbody.mass;
+        sphere.rigidbody.AddForce(sphere.transform.forward * gravityForce);
 
         // Check if Sphere is outside the desired bounds
-        float x = sphere.position.x > max.x ? max.x : sphere.position.x;
+        float x = sphere.transform.position.x > max.x ? max.x : sphere.transform.position.x;
         x = x < min.x ? min.x : x;
-        float y = sphere.position.y > max.y ? max.y : sphere.position.y;
+        float y = sphere.transform.position.y > max.y ? max.y : sphere.transform.position.y;
         y = y < min.y ? min.y : y;
-        float z = sphere.position.z > max.z ? max.z : sphere.position.z;
+        float z = sphere.transform.position.z > max.z ? max.z : sphere.transform.position.z;
         z = z < min.z ? min.z : z;
-        if (x != sphere.position.x ||
-            y != sphere.position.y ||
-            z != sphere.position.z)
+        if (x != sphere.transform.position.x ||
+            y != sphere.transform.position.y ||
+            z != sphere.transform.position.z)
         {
-            sphere.position = new Vector3(x, y, z);
-            sphereRigidbody.velocity = Vector3.zero; sphereRigidbody.angularVelocity = Vector3.zero;
+            sphere.transform.position = new Vector3(x, y, z);
+            sphere.rigidbody.velocity = Vector3.zero; sphere.rigidbody.angularVelocity = Vector3.zero;
         }
 
-        bool shouldHang = Raycast(graphics.Find("Armature/Hip").position, transform.forward, .1f, ~0, Color.gray).collider == null;
-        if (hanging != shouldHang)
-        {
-            hanging = shouldHang;
-            SetHanging(shouldHang);
-        }
-
+        needsReset = true;
         onWall = false;
     }
 
-    private RaycastHit RaycastSpread(Vector3 origin, Vector3 direction, float distance, LayerMask layerMask, Color color, Transform holdCollidedWith)
+    private void ResetSphere()
     {
-        RaycastHit hit = Raycast(origin, direction, distance, layerMask, color);
-        if (hit.collider != null)
-        {
-            return hit;
-        }
-
-        float[] priorityMods = new float[] {
-            radius * -.5f,
-            radius * -.4f,
-            radius * -.3f,
-            radius * -.2f,
-            radius * -.1f,
-            0,
-            radius * .1f,
-            radius * .2f,
-            radius * .3f,
-            radius * .4f,
-            radius * .5f,
-        };
-        float[] secondaryMods = new float[] {
-            radius * -.5f,
-            radius * -.4f,
-            radius * -.3f,
-            radius * -.2f,
-            radius * -.1f,
-            0,
-            radius * .1f,
-            radius * .2f,
-            radius * .3f,
-            radius * .4f,
-            radius * .5f,
-        };
-
-        if (vertical != 0 || horizontal == 0)
-        {
-            // Vertical is Prority
-            if (vertical < 0) { priorityMods = priorityMods.Reverse().ToArray(); }
-            if (horizontal < 0) { secondaryMods = secondaryMods.Reverse().ToArray(); }
-        }
-        else
-        {
-            // Horizontal is Priority
-            if (vertical < 0) { secondaryMods = secondaryMods.Reverse().ToArray(); }
-            if (horizontal < 0) { priorityMods = priorityMods.Reverse().ToArray(); }
-        }
-
-        foreach (float priority in priorityMods)
-        {
-            foreach (float secondary in secondaryMods)
-            {
-                if (priority == 0 && secondary == 0)
-                {
-                    // Checked before nested for loops
-                    continue;
-                }
-
-                Vector3 originV2 = origin;
-                if (vertical != 0 || horizontal == 0)
-                {
-                    originV2 = origin + sphere.right * secondary + sphere.up * priority;
-                }
-                else
-                {
-                    originV2 = origin + sphere.right * priority + sphere.up * secondary;
-                }
-                hit = Raycast(originV2, direction, distance, layerMask, color);
-
-                // Just incase the raycast picks up a different hold
-                if (hit.transform != holdCollidedWith)
-                {
-                    continue;
-                }
-
-                if (hit.collider != null && hit.transform == collider.transform)
-                {
-                    float distanceFromSpehere = Vector3.Distance(hit.point, transform.position);
-                    if (distanceFromSpehere > ignoreSameHoldDistance)
-                    {
-                        return hit;
-                    }
-                }
-                else if (hit.collider != null)
-                {
-                    return hit;
-                }
-            }
-        }
-        return Raycast(origin, direction, distance, layerMask, color);
+        needsReset = false;
+        sphere.transform.forward = transform.forward;
+        sphere.transform.position = transform.position + (transform.forward * -.15f);
+        sphere.rigidbody.velocity = Vector3.zero;
+        sphere.rigidbody.angularVelocity = Vector3.zero;
     }
-
-    private void ResetSphereLocation()
-    {
-        beenReset = true;
-        sphere.forward = transform.forward;
-        sphere.position = transform.position + (transform.forward * -.15f);
-        sphereRigidbody.velocity = Vector3.zero;
-        sphereRigidbody.angularVelocity = Vector3.zero;
-    }
-
 
     private void SetClimbing(bool climbing)
     {
@@ -324,12 +199,16 @@ public class ClimbMovementManager : AbstractMovementManager
 
     private class SphereMonoBehaviour : MonoBehaviour
     {
+        public new Rigidbody rigidbody;
         ClimbMovementManager climbMovementManager;
 
-        // Use this for initialization
-        void Start()
+        private void Awake()
         {
-
+            rigidbody = gameObject.AddComponent<Rigidbody>();
+            rigidbody.angularDrag = 0;
+            rigidbody.mass = 0;
+            rigidbody.freezeRotation = true;
+            rigidbody.useGravity = false;
         }
 
         internal void SetClimbMovementManager(ClimbMovementManager climbMovementManager)
@@ -340,11 +219,6 @@ public class ClimbMovementManager : AbstractMovementManager
         private void OnCollisionStay(Collision collision)
         {
             climbMovementManager.OnCollisionStay(collision);
-        }
-
-        private void OnTriggerEnter(Collider collision)
-        {
-            climbMovementManager.OnTriggerStay(collision);
         }
 
         private void OnTriggerStay(Collider other)

@@ -4,15 +4,18 @@ using System.Collections.Generic;
 
 public class GameManager : MonoBehaviour
 {
-    public static float defaultGravity;
+    public float defaultGravity;
     public List<ChunkGravity> chunkGravityList;
+
+    public static float gravity;
 
     static Dictionary<string, float> chunkGravity = new Dictionary<string, float>();
 
     // Use this for initialization
     void Start()
     {
-        foreach(ChunkGravity chunkGrav in chunkGravityList)
+        gravity = defaultGravity;
+        foreach (ChunkGravity chunkGrav in chunkGravityList)
         {
             chunkGravity.Add(chunkGrav.chunkTag, chunkGrav.gravity);
         }
@@ -26,7 +29,11 @@ public class GameManager : MonoBehaviour
 
     public static float GetGravity(string chunkTag)
     {
-        return chunkGravity.ContainsKey(chunkTag) ? chunkGravity[chunkTag] : defaultGravity;
+        if (chunkTag == null)
+        {
+            return gravity;
+        }
+        return chunkGravity.ContainsKey(chunkTag) ? chunkGravity[chunkTag] : gravity;
     }
 }
 

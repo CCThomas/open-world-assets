@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 [CreateAssetMenu(fileName = "New Character", menuName = "Character/Character")]
@@ -7,11 +8,15 @@ public class Character : ScriptableObject
     public Species species;
     public bool intialized;
 
+    string currentModelName;
+
     Dictionary<string, Trait> traitsDictionary = new Dictionary<string, Trait>();
     Dictionary<string, Ability> abilityDictionary = new Dictionary<string, Ability>();
 
     public void Initialize()
     {
+        currentModelName = species.modelName;
+
         traitsDictionary.Clear();
         foreach (Trait trait in species.traits)
         {
@@ -23,6 +28,10 @@ public class Character : ScriptableObject
         {
             abilityDictionary.Add(ability.key, ability);
         }
+    }
+    public string GetModelName()
+    {
+        return currentModelName;
     }
 
     public Transform getBodyPartHead(Transform graphics)

@@ -5,22 +5,51 @@ using UnityEngine;
 public class SwimMovementManager : AbstractMovementManager
 {
     bool submerged;
+    float submergedGracePeriod;
 
     public SwimMovementManager(AbstractMovementManager movementManager) : base(movementManager)
     {
-        currentState = MovementState.Swim;
-        intendedState = MovementState.Swim;
+        SetCurrentState(MovementState.Swim);
         SetSwimming(true);
-        transform.position = new Vector3(transform.position.x, collider.transform.position.y, transform.position.z);
+        Debug.Log(rigidbody.velocity.y);
+        if (rigidbody.velocity.y < -5f)
+        {
+            submerged = true;
+        }
+        else
+        {
+            transform.position = new Vector3(transform.position.x, collider.transform.position.y, transform.position.z);
+        }
+    }
+
+    public override bool AttemptInteract(Vector3 lookingDirection)
+    {
+        //if (CanGrabHold(lookDirection))
+        {
+            Debug.Log("Here123");
+            SetIntendedState(MovementState.Climb);
+            return true;
+        }
+        return false;
     }
 
     public override bool AttemptSetDown(bool desired)
     {
-        if (desired && null == Raycast(transform.position, Vector3.down, .5f, ~0, Color.red).collider)
+        if (!submerged && null == Raycast(transform.position, Vector3.down, character.GetTraitValue("height") * .5f, ~0, Color.yellow).collider)
         {
             down = desired;
         }
         return down == desired;
+    }
+
+    public override bool AttemptSetUp(bool desired)
+    {
+        if (!submerged && desired && 0 != character.GetAbilityValue("fly"))
+        {
+            SetIntendedState(MovementState.Fly);
+            transform.position = new Vector3(transform.position.x, transform.position.y + .1f, transform.position.z);
+        }
+        return desired;
     }
 
     public override void CleanUp()
@@ -35,9 +64,11 @@ public class SwimMovementManager : AbstractMovementManager
 
     public override void OnTriggerStay(Collider other)
     {
-        if (other.gameObject.layer == WATER_INDEX)
+        if (other.gameObject.layer == WATER_INDEX && Time.time > submergedGracePeriod
+            && graphics.Find("Armature/Hip/Stomach/Chest").position.y > collider.transform.position.y)
         {
             submerged = false;
+            transform.position = new Vector3(transform.position.x, collider.transform.position.y, transform.position.z);
         }
     }
 
@@ -67,29 +98,16 @@ public class SwimMovementManager : AbstractMovementManager
 
             if (down)
             {
+                Debug.Log("Dive");
                 // Dive Down
                 down = false;
                 submerged = true;
+                submergedGracePeriod = Time.time + 1;
                 float verticalSpeed = Mathf.Sqrt(2 * character.GetAbilityValue("jump") * gravity);
-                velocityChange.y = -verticalSpeed;
+                velocityChange.y = -verticalSpeed * 2;
             }
-            else
-            {
-                // Adjust Y Axis to simulate swimming being in water
-                if (collider.transform.position.y < transform.position.y)
-                {
-                    velocityChange.y = -.01f;
-                }
-                else if (collider.transform.position.y > transform.position.y)
-                {
-                    velocityChange.y = .01f;
-                }
-                else
-                {
-                    velocityChange.y = 0;
-                }
-            }
-        } else
+        }
+        else
         {
             // Similar to flying
             transform.forward = lookDirection;
@@ -101,12 +119,12 @@ public class SwimMovementManager : AbstractMovementManager
         if (!submerged)
         {
             // Can Stand?
-            RaycastHit hitinfo = Raycast(transform.position, Vector3.down, character.GetTraitValue("height") * .9f, DEFAULT, Color.red);
+            RaycastHit hitinfo = Raycast(transform.position, Vector3.down, character.GetTraitValue("height") * .5f, DEFAULT, Color.red);
             if (hitinfo.collider != null)
             {
                 collider = hitinfo.collider;
                 pointOfContact = hitinfo.point;
-                intendedState = MovementState.Ground;
+                SetIntendedState(MovementState.Ground);
             }
         }
     }

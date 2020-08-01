@@ -7,25 +7,28 @@ public class GroundMovementManager : AbstractMovementManager
     float fallingBuffer = .5f;
 
     // Trackers
-    bool grounded, slide;
+    bool grounded, slide, falling;
     float fallingTimeStart, timeSpentSliding;
+    CapsuleCollider capsuleCollider;
     Vector3 animationSpeed;
 
     public GroundMovementManager(AbstractMovementManager movementManager) : base(movementManager)
     {
         SetCurrentState(MovementState.Ground);
+        capsuleCollider = graphics.GetComponent<CapsuleCollider>();
     }
 
     public GroundMovementManager(Character character, Transform transform) : base(character, transform)
     {
         SetCurrentState(MovementState.Ground);
+        SetIntendedState(MovementState.Ground);
     }
 
     public override bool AttemptInteract(Vector3 lookDirection)
     {
-        if (CanGrabHold(lookDirection))
+        if (TryClimbing(lookDirection))
         {
-            SetCurrentState(MovementState.Climb);
+            SetIntendedState(MovementState.Climb);
             return true;
         }
         return false;
@@ -52,16 +55,15 @@ public class GroundMovementManager : AbstractMovementManager
         }
         SetCrouching(down);
 
-        CapsuleCollider collider = graphics.GetComponent<CapsuleCollider>();
         if (down)
         {
-            collider.height = .8f;
-            collider.center = new Vector3(0, .5f * .8f, 0);
+            capsuleCollider.height = .8f;
+            capsuleCollider.center = new Vector3(0, .5f * .8f, 0);
         }
         else if (!down)
         {
-            collider.height = 1;
-            collider.center = new Vector3(0, .5f, 0);
+            capsuleCollider.height = 1;
+            capsuleCollider.center = new Vector3(0, .5f, 0);
         }
 
         return down == desired;
@@ -102,9 +104,9 @@ public class GroundMovementManager : AbstractMovementManager
                 up = true;
                 AttemptSetQuick(false);
             }
-            else if (!grounded && 0 != character.GetAbilityValue("fly"))
+            else if (!grounded && TryFlying())
             {
-                SetIntendedState(MovementState.Fly, .5f);
+                SetIntendedState(MovementState.Fly);
             }
         }
         return up == desired;
@@ -120,26 +122,25 @@ public class GroundMovementManager : AbstractMovementManager
 
     public override void OnCollisionStay(Collision collision)
     {
-        if (collision.gameObject.layer == WALL_INDEX)
-        {
-            return; // Ignore
-        }
         fallingTimeStart = 0;
         grounded = true;
     }
 
     public override void OnTriggerStay(Collider other)
     {
-        if (midTransition)
-        {
-            return;
-        }
         if (other.gameObject.layer == WATER_INDEX
             && other.transform.position.y > graphics.Find("Armature/Hip/Stomach/Chest").position.y
             && 0 != character.GetAbilityValue("swim"))
         {
-            SetIntendedState(MovementState.Swim, .5f);
+            this.collider = other;
+            SetIntendedState(MovementState.Swim);
         }
+    }
+
+    public override void SetGraphics(Transform graphics)
+    {
+        base.SetGraphics(graphics);
+        capsuleCollider = graphics.GetComponent<CapsuleCollider>();
     }
 
     public override void UpdateAnimation()
@@ -157,6 +158,22 @@ public class GroundMovementManager : AbstractMovementManager
         if (slide && timeSpentSliding + .5 < Time.time)
         {
             SetSliding(false);
+        }
+
+        if (grounded)
+        {
+            Vector3 direction = transform.forward * vertical + transform.right * horizontal;
+            RaycastHit hit = Raycast(transform.position + transform.up * character.GetTraitValue("height") * .5f, direction, capsuleCollider.radius * 1.5f, ~0, Color.red);
+            if (hit.collider != null)
+            {
+                horizontal = 0;
+                vertical = 0;
+                falling = true;
+            }
+            else
+            {
+                falling = false;
+            }
         }
 
         // Calculate how fast we should be moving
@@ -204,8 +221,11 @@ public class GroundMovementManager : AbstractMovementManager
             if (up)
             {
                 up = false;
-                float verticalSpeed = Mathf.Sqrt(2 * character.GetAbilityValue("jump") * gravity);
-                rigidbody.velocity = new Vector3(velocity.x, verticalSpeed, velocity.z);
+                if (!falling)
+                {
+                    float verticalSpeed = Mathf.Sqrt(2 * character.GetAbilityValue("jump") * gravity);
+                    rigidbody.velocity = new Vector3(velocity.x, verticalSpeed, velocity.z);
+                }
             }
 
         }
@@ -213,7 +233,8 @@ public class GroundMovementManager : AbstractMovementManager
         {
             if (CanGrabHold(lookDirection) && !down)
             {
-                SetIntendedState(MovementState.Climb, .5f);
+                Debug.Log("Guru2");
+                SetIntendedState(MovementState.Climb);
                 return;
             }
         }
@@ -233,15 +254,15 @@ public class GroundMovementManager : AbstractMovementManager
 
     private bool CanGrabHold(Vector3 lookingDirection)
     {
-        if (0 == character.GetAbilityValue("climb") || midTransition)
+        if (0 == character.GetAbilityValue("climb"))
         {
             // Player cannot climb
             return false;
         }
 
         Vector3 origin = character.getBodyPartHead(graphics).position;
-        RaycastHit hit = Raycast(origin, lookingDirection, .8f, HOLD, Color.green);
-        if (hit.collider != null)
+        RaycastHit hit = Raycast(origin, lookingDirection, .8f, DEFAULT, Color.green);
+        if (hit.collider != null && hit.collider.gameObject.name.Contains(ClimbMovementManager.HOLD_NAME))
         {
             collider = hit.collider;
             pointOfContact = hit.point;

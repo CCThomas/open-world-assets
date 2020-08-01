@@ -1,7 +1,11 @@
 # open-world-assets
 Unity Assets for an Open World Game
 
-## Braning Structure
+## Getting Started
+- [Branching Structure](#branching-structure)
+- [Setup](#setup)
+
+### Braning Structure
 - _main_
   - The, permanent, main branch for "Finalalized" Assets
 - _qa_
@@ -13,3 +17,8 @@ Unity Assets for an Open World Game
   - _playground_ is branched off _qa_, and rebased off the branch when issues are merged
 - _issue-#_
   - Temorary Branches for handling issues made to this repo
+
+  ### Setup
+  - Download Unity
+    - Packages
+      - Input System
